@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Ultimate 3D Particle System - 20 Gestures</title>
+<style>
+  body { margin:0; overflow:hidden; background:black; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+  video { display:none; }
+  #ui-container {
+    position: absolute;
+    top: 30px;
+    left: 30px;
+    color: white;
+    pointer-events: none;
+  }
+  #gesture-name {
+    font-size: 2.5rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    background: linear-gradient(to right, #ff3399, #33ccff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin: 0;
+  }
+  #hint { color: #666; font-size: 0.9rem; margin-top: 5px; }
+</style>
+</head>
+<body>
+
+<div id="ui-container">
+  <p id="hint">ACTIVE GESTURE</p>
+  <h1 id="gesture-name">Waiting...</h1>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.module.js';
+
+// ------------------- ENGINE SETUP -------------------
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+camera.position.z = 40;
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
+document.body.appendChild(renderer.domElement);
+
+// ------------------- PARTICLE SYSTEM -------------------
+const particleCount = 4000;
+const geometry = new THREE.BufferGeometry();
+const positions = new Float32Array(particleCount * 3);
+const colors = new Float32Array(particleCount * 3);
+const targetPositions = new Float32Array(particleCount * 3);
+
+for(let i=0; i<particleCount*3; i++) {
+  positions[i] = (Math.random() - 0.5) * 20;
+  targetPositions[i] = positions[i];
+  colors[i] = Math.random();
+}
+
+geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+const material = new THREE.PointsMaterial({
+  size: 0.15,
+  vertexColors: true,
+  transparent: true,
+  opacity: 0.8,
+  blending: THREE.AdditiveBlending,
+  sizeAttenuation: true
+});
+
+const particles = new THREE.Points(geometry, material);
+scene.add(particles);
+
+// ------------------- SHAPE & COLOR MATH -------------------
+const currentColor = new THREE.Color(0xff3399);
+const targetColor = new THREE.Color(0xff3399);
+
+const setShape = (func, colorHex) => {
+  func(targetPositions);
+  targetColor.setHex(colorHex);
+};
+
+const shapes = {
+  sphere: (t) => { for(let i=0;i<particleCount;i++){ const u=Math.random(), v=Math.random(), th=2*Math.PI*u, ph=Math.acos(2*v-1), r=10; t[i*3]=r*Math.sin(ph)*Math.cos(th); t[i*3+1]=r*Math.sin(ph)*Math.sin(th); t[i*3+2]=r*Math.cos(ph); }},
+  heart: (t) => { for(let i=0;i<particleCount;i++){ const a=Math.random()*Math.PI*2, s=Math.random(); t[i*3]=14*Math.pow(Math.sin(a),3)*s; t[i*3+1]=(12*Math.cos(a)-5*Math.cos(2*a)-2*Math.cos(3*a)-Math.cos(4*a))*s; t[i*3+2]=(Math.random()-0.5)*3; }},
+  torus: (t) => { for(let i=0;i<particleCount;i++){ const u=Math.random()*Math.PI*2, v=Math.random()*Math.PI*2, R=10, r=4; t[i*3]=(R+r*Math.cos(v))*Math.cos(u); t[i*3+1]=(R+r*Math.cos(v))*Math.sin(u); t[i*3+2]=r*Math.sin(v); }},
+  dna: (t) => { for(let i=0;i<particleCount;i++){ const y=(i/particleCount)*20-10, a=y*1.5, r=5, side=i%2==0?1:-1; t[i*3]=r*Math.cos(a)*side; t[i*3+1]=y; t[i*3+2]=r*Math.sin(a)*side; }},
+  star: (t) => { for(let i=0;i<particleCount;i++){ const p=5, r=i%2==0?8:4, a=(i/particleCount)*Math.PI*20; t[i*3]=r*Math.cos(a); t[i*3+1]=r*Math.sin(a); t[i*3+2]=(Math.random()-0.5)*2; }},
+  cube: (t) => { for(let i=0;i<particleCount;i++){ t[i*3]=(Math.random()-0.5)*15; t[i*3+1]=(Math.random()-0.5)*15; t[i*3+2]=(Math.random()-0.5)*15; }},
+  plane: (t) => { for(let i=0;i<particleCount;i++){ t[i*3]=(Math.random()-0.5)*25; t[i*3+1]=(Math.random()-0.5)*25; t[i*3+2]=0; }},
+  spike: (t) => { for(let i=0;i<particleCount;i++){ const a=Math.random()*Math.PI*2, r=Math.random()*15; t[i*3]=r*Math.cos(a); t[i*3+1]=r*Math.sin(a); t[i*3+2]=Math.abs(t[i*3])*Math.random()*2; }},
+  ring: (t) => { for(let i=0;i<particleCount;i++){ const a=Math.random()*Math.PI*2, r=12+(Math.random()-0.5)*1; t[i*3]=r*Math.cos(a); t[i*3+1]=r*Math.sin(a); t[i*3+2]=0; }},
+  vortex: (t) => { for(let i=0;i<particleCount;i++){ const r=i*0.004, a=i*0.05; t[i*3]=r*15*Math.cos(a); t[i*3+1]=(i/100)-20; t[i*3+2]=r*15*Math.sin(a); }}
+};
+
+// ------------------- GESTURE ENGINE -------------------
+const videoElement = document.createElement('video');
+const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+const uiName = document.getElementById('gesture-name');
+
+hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.8, minTrackingConfidence: 0.8 });
+
+let curG = '';
+let lastTime = 0;
+let rx=0, ry=0;
+
+hands.onResults(results => {
+  if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+    const lm = results.multiHandLandmarks[0];
+    const now = performance.now();
+
+    const isE = (t, m) => t.y < m.y; // Is Extended
+    const i=isE(lm[8],lm[6]), m=isE(lm[12],lm[10]), r=isE(lm[16],lm[14]), p=isE(lm[20],lm[18]), t=lm[4].x < lm[3].x;
+    const pinch = Math.hypot(lm[4].x-lm[8].x, lm[4].y-lm[8].y);
+
+    let g = curG;
+    
+    // THE 20-GESTURE LOGIC MATRIX
+    if (pinch < 0.03) g = 'Pinch';
+    else if (!i && !m && !r && !p) g = 'Fist';
+    else if (i && m && r && p && t) g = 'Open Palm';
+    else if (i && m && !r && !p) g = 'Peace';
+    else if (i && !m && !r && !p) g = 'Point';
+    else if (t && !i && !m && !r && !p) g = 'Thumbs Up';
+    else if (p && !i && !m && !r) g = 'Pinky Up';
+    else if (i && p && !m && !r) g = 'Rock On';
+    else if (t && i && p && !m && !r) g = 'Spiderman';
+    else if (i && m && r && !p) g = 'The Four';
+    else if (t && i && !m && !r && !p) g = 'Gun Shape';
+    else if (lm[8].y > lm[5].y && i) g = 'Pointing Down';
+    else if (lm[9].x < lm[0].x - 0.2) g = 'Tilt Left';
+    else if (lm[9].x > lm[0].x + 0.2) g = 'Tilt Right';
+    else if (lm[4].y > lm[3].y && t) g = 'Thumbs Down';
+    else g = 'Neutral';
+
+    if (g !== curG && (now - lastTime > 400)) {
+      curG = g; lastTime = now; uiName.innerText = g;
+      if(g==='Fist') setShape(shapes.heart, 0xff0033);
+      else if(g==='Pinch') setShape(shapes.torus, 0x00ffff);
+      else if(g==='Peace') setShape(shapes.dna, 0x33ff99);
+      else if(g==='Point') setShape(shapes.star, 0xffcc00);
+      else if(g==='Rock On') setShape(shapes.spike, 0x9900ff);
+      else if(g==='Spiderman') setShape(shapes.vortex, 0xff5500);
+      else if(g==='Open Palm') setShape(shapes.sphere, 0xff3399);
+      else if(g==='Pinky Up') setShape(shapes.ring, 0xaaaaff);
+      else if(g==='Tilt Left') setShape(shapes.cube, 0x00ff00);
+      else if(g==='Tilt Right') setShape(shapes.plane, 0x0000ff);
+    }
+    rx = (lm[0].y - 0.5) * 3;
+    ry = (lm[0].x - 0.5) * 3;
+  }
+});
+
+new Camera(videoElement, {onFrame: async () => { await hands.send({image: videoElement}); }, width: 640, height: 480}).start();
+
+// ------------------- ANIMATION LOOP -------------------
+function animate() {
+  requestAnimationFrame(animate);
+  
+  const pos = geometry.attributes.position.array;
+  const col = geometry.attributes.color.array;
+  
+  currentColor.lerp(targetColor, 0.05);
+
+  for(let i=0; i<particleCount; i++) {
+    // Morph Position
+    pos[i*3] += (targetPositions[i*3] - pos[i*3]) * 0.1;
+    pos[i*3+1] += (targetPositions[i*3+1] - pos[i*3+1]) * 0.1;
+    pos[i*3+2] += (targetPositions[i*3+2] - pos[i*3+2]) * 0.1;
+    
+    // Smooth Color Transition
+    col[i*3] = currentColor.r;
+    col[i*3+1] = currentColor.g;
+    col[i*3+2] = currentColor.b;
+  }
+  
+  geometry.attributes.position.needsUpdate = true;
+  geometry.attributes.color.needsUpdate = true;
+
+  particles.rotation.y += (ry - particles.rotation.y) * 0.05;
+  particles.rotation.x += (rx - particles.rotation.x) * 0.05;
+
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
